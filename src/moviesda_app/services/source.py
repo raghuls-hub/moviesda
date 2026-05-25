@@ -191,6 +191,40 @@ class SourceService:
                     )
         return all_results
 
+    def get_movie_detail_fast(self, movie_url: str, base_url: str) -> MovieDetail:
+        """Fetch only title, poster, synopsis, metadata — no crawling."""
+        response = self.get(movie_url, referer=base_url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        title, metadata = self._extract_movie_title_and_metadata(soup, movie_url)
+        poster_url = self._extract_poster_url(soup, movie_url)
+        synopsis = self._extract_synopsis(soup)
+        return MovieDetail(title=title, url=movie_url, poster_url=poster_url, synopsis=synopsis, metadata=metadata, links=[])
+
+    def fetch_download_links(self, movie_url: str, base_url: str) -> list[QualityLink]:
+        """Crawl for download links and probe each for file size via HEAD."""
+        response = self.get(movie_url, referer=base_url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        options = self._extract_quality_links(soup, movie_url, base_url)
+        if not options:
+            for result in self.crawl_movie(movie_url, base_url):
+                for link in result["links"]:
+                    options.append(DownloadOption(label=link["label"], url=link["url"]))
+        links: list[QualityLink] = []
+        for opt in options:
+            size = self._probe_file_size(opt.url)
+            links.append(QualityLink(label=opt.label, url=opt.url, file_size_bytes=size))
+        return links
+
+    def _probe_file_size(self, url: str) -> int:
+        try:
+            r = self.session.head(url, timeout=8, allow_redirects=True)
+            length = r.headers.get("content-length")
+            if length and length.isdigit():
+                return int(length)
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
     def get_movie_detail(self, movie_url: str, base_url: str) -> MovieDetail:
         response = self.get(movie_url, referer=base_url)
         soup = BeautifulSoup(response.text, "html.parser")

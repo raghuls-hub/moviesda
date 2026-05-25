@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import uuid
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager
 from kivymd.app import MDApp
-from pathlib import Path
+
 from moviesda_app.config import AppConfig
-from moviesda_app.models import DownloadProgress, MoviePage, YearOption
+from moviesda_app.models import DownloadJob, JobStatus, MoviePage, YearOption
 from moviesda_app.services.downloader import DownloadService
+from moviesda_app.services.queue_manager import DownloadQueueManager
 from moviesda_app.services.source import SourceService
 from moviesda_app.state import AppState
 from moviesda_app.ui.screens import DownloadScreen, MovieDetailScreen, MovieListScreen, YearSelectionScreen
@@ -30,10 +33,13 @@ class MovieBrowserApp(MDApp):
             timeout=self.config_data.request_timeout,
         )
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self.queue_manager = DownloadQueueManager(
+            download_service=self.download_service,
+            on_update=self._on_job_update,
+        )
 
     def build(self):
         self.title = "MoviesDA App"
-        # Professional dark theme with strong contrast and blue/gold accents
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.primary_hue = "400"
@@ -49,6 +55,76 @@ class MovieBrowserApp(MDApp):
     def on_start(self):
         self.state.status_message = "Ready"
 
+    # ---------------------------------------------------------------- queue
+
+    def enqueue_download(self, url: str, title: str, referer: str | None = None) -> None:
+        job = DownloadJob(
+            id=str(uuid.uuid4()),
+            title=title,
+            url=url,
+            referer=referer or self.state.base_url or "",
+        )
+        self.queue_manager.enqueue(job)  # _apply_job_update will sync state.download_jobs
+        self.open_download_screen()
+
+    def cancel_job(self, job_id: str) -> None:
+        self.queue_manager.cancel(job_id)
+
+    def _on_job_update(self, job: DownloadJob) -> None:
+        Clock.schedule_once(lambda *_: self._apply_job_update(job))
+
+    def _apply_job_update(self, job: DownloadJob) -> None:
+        self.state.download_jobs = self.queue_manager.all_jobs()
+        self._send_notification(job)
+        if not self.root or self.root.current != "download":
+            return
+        screen = self.root.get_screen("download")
+        if job.status == JobStatus.DOWNLOADING:
+            screen.update_active_progress(job)
+        else:
+            screen.refresh()
+
+    def _send_notification(self, job: DownloadJob) -> None:
+        if job.status not in (JobStatus.DOWNLOADING, JobStatus.DONE, JobStatus.ERROR):
+            return
+        if not hasattr(self, "_last_notified_status"):
+            self._last_notified_status: dict[str, str] = {}
+        if job.status == JobStatus.DOWNLOADING and self._last_notified_status.get(job.id) == JobStatus.DOWNLOADING:
+            return
+        self._last_notified_status[job.id] = job.status
+        try:
+            from plyer import notification  # noqa: PLC0415
+            def _trunc(s: str, n: int = 60) -> str:
+                return s if len(s) <= n else s[:n - 1] + "…"
+            if job.status == JobStatus.DOWNLOADING:
+                notification.notify(title=_trunc("Downloading"), message=_trunc(job.title), app_name="MoviesDA", timeout=2)
+            elif job.status == JobStatus.DONE:
+                notification.notify(title=_trunc("Download complete"), message=_trunc(job.title), app_name="MoviesDA", timeout=4)
+            elif job.status == JobStatus.ERROR:
+                notification.notify(title=_trunc("Download failed"), message=_trunc(f"{job.title}: {job.error}"), app_name="MoviesDA", timeout=4)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # --------------------------------------------------------- navigation
+
+    def open_download_screen(self) -> None:
+        if not self.root:
+            return
+        if self.root.current != "download":
+            self.state.last_screen = self.root.current
+        self.root.current = "download"
+        self.root.get_screen("download").refresh()
+
+    def go_back_from_downloads(self) -> None:
+        if not self.root:
+            return
+        target = self.state.last_screen or "movies"
+        if target == "download":
+            target = "movies"
+        self.root.current = target
+
+    # --------------------------------------------------------- async loaders
+
     def load_years_async(self, success, failure):
         def task():
             try:
@@ -58,27 +134,18 @@ class MovieBrowserApp(MDApp):
                 if not base_url:
                     raise RuntimeError("Could not resolve a source URL. Set MOVIESDA_BASE_URL first.")
                 self.state.base_url = base_url
-                print(f"[years] Fetching latest year link from {base_url}...")
                 latest_year_link = self.source_service.get_latest_year_link(base_url)
-                print(f"[years] get_latest_year_link -> {latest_year_link}")
                 if not latest_year_link:
                     raise RuntimeError("Could not find a year index page.")
-                print(f"[years] Resolving home.html from {latest_year_link}...")
                 home_html = self.source_service.resolve_to_home_html(latest_year_link, base_url)
-                print(f"[years] resolve_to_home_html -> {home_html}")
                 if not home_html:
                     raise RuntimeError("Could not resolve the home.html page.")
                 self.state.home_html_url = home_html
-                print(f"[years] Getting year links from {home_html}...")
                 years = self.source_service.get_year_movie_links(home_html)
-                print(f"[years] get_year_movie_links -> found {len(years)} entries")
                 self.state.years = [
                     YearOption(year=int(year), label=data["label"], url=data["url"])
                     for year, data in sorted(years.items(), key=lambda item: int(item[0]), reverse=True)
                 ]
-                print(f"[years] Prepared {len(self.state.years)} YearOption objects")
-                for y in self.state.years:
-                    print(f"[years]  - {y.year}: {y.label} -> {y.url}")
                 Clock.schedule_once(lambda *_: success(self.state.years))
             except Exception as exc:  # noqa: BLE001
                 err = exc
@@ -102,101 +169,31 @@ class MovieBrowserApp(MDApp):
 
         self.executor.submit(task)
 
-    def open_download_screen(self) -> None:
-        if not self.root:
-            return
-        if self.root.current != "download":
-            self.state.last_screen = self.root.current
-        self.root.current = "download"
-        self._refresh_download_screen()
-
-    def go_back_from_downloads(self) -> None:
-        if not self.root:
-            return
-        target = self.state.last_screen or "movies"
-        if target == "download":
-            target = "movies"
-        self.root.current = target
-
-    def start_download(self, url: str, title: str, referer: str | None = None) -> None:
-        self.state.download_progress = DownloadProgress(title=title, url=url, status="Starting download...", percent=0.0, downloaded_bytes=0, total_bytes=0, file_path="", completed=False)
-        self.open_download_screen()
-
-        def progress_callback(downloaded_bytes: int, total_bytes: int) -> None:
-            percent = (downloaded_bytes / total_bytes * 100) if total_bytes else 0.0
-            progress = DownloadProgress(
-                title=title,
-                url=url,
-                status=f"Downloading {title}...",
-                percent=percent,
-                downloaded_bytes=downloaded_bytes,
-                total_bytes=total_bytes,
-                file_path=self.state.download_progress.file_path,
-                completed=False,
-            )
-            Clock.schedule_once(lambda *_: self._apply_download_progress(progress))
-
+    def load_movie_detail_fast_async(self, movie_url: str, success, failure):
         def task():
             try:
-                result = self.download_service.resolve_and_download(
-                    url,
-                    referer=referer or self.state.base_url or None,
-                    progress_callback=progress_callback,
-                )
-                progress = DownloadProgress(
-                    title=title,
-                    url=url,
-                    status="Download complete",
-                    percent=100.0,
-                    downloaded_bytes=result.size_bytes,
-                    total_bytes=max(result.size_bytes, 1),
-                    file_path=str(result.file_path),
-                    completed=True,
-                )
-                Clock.schedule_once(lambda *_: self._apply_download_complete(progress))
+                detail = self.source_service.get_movie_detail_fast(movie_url, self.state.base_url or movie_url)
+                Clock.schedule_once(lambda *_: success(detail))
             except Exception as exc:  # noqa: BLE001
-                err = str(exc)
-                progress = DownloadProgress(title=title, url=url, status=f"Error: {err}", percent=0.0, completed=False)
-                Clock.schedule_once(lambda *_: self._apply_download_error(err, progress))
-
+                err = exc
+                Clock.schedule_once(lambda *_: failure(str(err)))
         self.executor.submit(task)
 
-    def _refresh_download_screen(self) -> None:
-        if self.root and "download" in self.root.screen_names:
-            self.root.get_screen("download").render_download_state()
-
-    def _apply_download_progress(self, progress: DownloadProgress) -> None:
-        self.state.download_progress = progress
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").update_progress(progress)
-
-    def _apply_download_complete(self, progress: DownloadProgress) -> None:
-        self.state.download_progress = progress
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").show_complete(progress)
-
-    def _apply_download_error(self, message: str, progress: DownloadProgress) -> None:
-        self.state.download_progress = progress
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").show_error(message)
+    def fetch_download_links_async(self, movie_url: str, success, failure):
+        def task():
+            try:
+                links = self.source_service.fetch_download_links(movie_url, self.state.base_url or movie_url)
+                Clock.schedule_once(lambda *_: success(links))
+            except Exception as exc:  # noqa: BLE001
+                err = exc
+                Clock.schedule_once(lambda *_: failure(str(err)))
+        self.executor.submit(task)
 
     def load_movie_detail_async(self, movie_url: str, success, failure):
         def task():
             try:
                 detail = self.source_service.get_movie_detail(movie_url, self.state.base_url or movie_url)
                 Clock.schedule_once(lambda *_: success(detail))
-            except Exception as exc:  # noqa: BLE001
-                err = exc
-                Clock.schedule_once(lambda *_: failure(str(err)))
-
-        self.executor.submit(task)
-
-    def download_async(self, url: str, success, failure):
-        def task():
-            try:
-                result = self.download_service.resolve_and_download(url, referer=self.state.base_url or None)
-                message = f"Downloaded to {result.file_path}"
-                Clock.schedule_once(lambda *_: success(message))
             except Exception as exc:  # noqa: BLE001
                 err = exc
                 Clock.schedule_once(lambda *_: failure(str(err)))

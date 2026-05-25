@@ -2,3 +2,5 @@ beautifulsoup4>=4.12.3
 kivy>=2.3.0
 kivymd @ git+https://github.com/kivymd/KivyMD.git
 requests>=2.32.3
+watchdog>=6.0.0
+plyer>=2.1.0

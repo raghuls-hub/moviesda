@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import partial
 
 from kivy.metrics import dp
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import AsyncImage
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.screenmanager import Screen
@@ -13,7 +12,7 @@ from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 
-from moviesda_app.models import DownloadProgress, MovieCard, MovieDetail, MoviePage, YearOption
+from moviesda_app.models import DownloadJob, JobStatus, MovieCard, MovieDetail, MoviePage, YearOption
 
 
 class BaseContentScreen(Screen):
@@ -98,7 +97,7 @@ class MovieListScreen(BaseContentScreen):
             self.ids.content.add_widget(MDLabel(text="No movies found on this page.", halign="center", text_color=(0.8, 0.9, 1, 1)))
             return
 
-        grid = GridLayout(cols=2, spacing=dp(12), size_hint_y=None)
+        grid = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
         for movie in movies:
             grid.add_widget(self._build_movie_card(movie))
@@ -112,7 +111,7 @@ class MovieListScreen(BaseContentScreen):
         downloads = MDButton(md_bg_color=(0.13, 0.39, 0.85, 1), size_hint_x=None, width=dp(140))
         downloads.add_widget(MDButtonText(text="Downloads"))
         downloads.bind(on_release=lambda *_: app.open_download_screen())
-        bar.add_widget(spacer)
+        # bar.add_widget(spacer)
         bar.add_widget(downloads)
         return bar
 
@@ -125,7 +124,12 @@ class MovieListScreen(BaseContentScreen):
         section = MDBoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None, adaptive_height=True, padding=(0, dp(8), 0, dp(8)))
         section.add_widget(MDLabel(text="Pages", bold=True, halign="center", size_hint_y=None, height=dp(24), text_color=(0.9, 0.95, 1, 1)))
 
-        row = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(44))
+        # outer box fills full width; inner row is shrunk to content and centered
+        outer = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44))
+        outer.add_widget(MDLabel(size_hint_x=1))  # left spacer
+        row = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_x=None, size_hint_y=None, height=dp(44))
+        row.bind(minimum_width=row.setter("width"))
+
         row.add_widget(self._page_button("Prev", max(current - 1, 1), enabled=current > 1))
 
         window = [p for p in available if abs(p - current) <= 2]
@@ -139,7 +143,9 @@ class MovieListScreen(BaseContentScreen):
             row.add_widget(self._page_button(str(page), page, enabled=not is_current, active=is_current))
 
         row.add_widget(self._page_button("Next", min(current + 1, total), enabled=current < total))
-        section.add_widget(row)
+        outer.add_widget(row)
+        outer.add_widget(MDLabel(size_hint_x=1))  # right spacer
+        section.add_widget(outer)
         return section
 
     def _page_button(self, label: str, page_number: int, *, enabled: bool = True, active: bool = False) -> MDButton:
@@ -156,18 +162,14 @@ class MovieListScreen(BaseContentScreen):
         self.load_movies()
 
     def _build_movie_card(self, movie: MovieCard) -> MDCard:
-        card = MDCard(radius=[dp(18), dp(18), dp(18), dp(18)], size_hint_y=None, height=dp(280), padding=dp(10), md_bg_color=(0.10, 0.12, 0.16, 1))
-        column = MDBoxLayout(orientation="vertical", spacing=dp(8))
-        if movie.poster_url:
-            column.add_widget(AsyncImage(source=movie.poster_url, size_hint_y=None, height=dp(170)))
-        else:
-            column.add_widget(MDLabel(text="[Poster]", markup=True, halign="center", size_hint_y=None, height=dp(170), text_color=(0.9, 0.9, 0.9, 1)))
-        column.add_widget(MDLabel(text=movie.title, bold=True, halign="center", shorten=True, size_hint_y=None, height=dp(36), text_color=(1, 1, 1, 1)))
+        card = MDCard(radius=[dp(18), dp(18), dp(18), dp(18)], size_hint_y=None, height=dp(100), padding=dp(10), md_bg_color=(0.10, 0.12, 0.16, 1))
+        horizontal = MDBoxLayout(orientation="horizontal", spacing=dp(8))
+        horizontal.add_widget(MDLabel(text=movie.title, bold=True, halign="center", shorten=True, size_hint_y=None, height=dp(36), text_color=(1, 1, 1, 1)))
         action = MDButton(md_bg_color=(0.18, 0.57, 0.87, 1))
         action.add_widget(MDButtonText(text="Details"))
         action.bind(on_release=partial(self.open_detail, movie))
-        column.add_widget(action)
-        card.add_widget(column)
+        horizontal.add_widget(action)
+        card.add_widget(horizontal)
         return card
 
     def open_detail(self, movie: MovieCard, *_args) -> None:
@@ -196,9 +198,11 @@ class MovieListScreen(BaseContentScreen):
 class MovieDetailScreen(BaseContentScreen):
     def load_movie(self, movie: MovieCard) -> None:
         app = MDApp.get_running_app()
+        self._movie_url = movie.url
+        self._links_container: MDBoxLayout | None = None
         self.clear_content()
-        self.set_status("Loading movie details...")
-        app.load_movie_detail_async(movie.url, self.render_detail, self.show_error)
+        self.set_status("Loading...")
+        app.load_movie_detail_fast_async(movie.url, self.render_detail, self.show_error)
 
     def render_detail(self, detail: MovieDetail) -> None:
         app = MDApp.get_running_app()
@@ -206,37 +210,94 @@ class MovieDetailScreen(BaseContentScreen):
         self.clear_content()
         self.set_status(detail.title)
         wrapper = MDBoxLayout(orientation="vertical", spacing=dp(16), adaptive_height=True)
+
         if detail.poster_url:
             wrapper.add_widget(AsyncImage(source=detail.poster_url, size_hint_y=None, height=dp(320)))
         wrapper.add_widget(MDLabel(text=detail.title, bold=True, halign="center", size_hint_y=None, height=dp(42), text_color=(1, 1, 1, 1)))
         if detail.synopsis:
-            wrapper.add_widget(MDLabel(text=detail.synopsis, theme_text_color="Secondary", adaptive_height=True, text_color=(0.9, 0.9, 0.9, 1)))
+            wrapper.add_widget(MDLabel(text=detail.synopsis, adaptive_height=True, halign="center", text_color=(0.9, 0.9, 0.9, 1)))
         if detail.metadata:
             for key, value in detail.metadata.items():
-                wrapper.add_widget(MDLabel(text=f"{key}: {value}", adaptive_height=True, text_color=(0.8, 0.9, 1, 1)))
-        if detail.links:
-            wrapper.add_widget(MDLabel(text="Download links", bold=True, size_hint_y=None, height=dp(28), text_color=(1, 0.85, 0.3, 1)))
-            for link in detail.links:
-                row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
-                row.add_widget(MDLabel(text=link.label, text_color=(1, 1, 1, 1)))
-                icon = MDIconButton(icon="download", theme_text_color="Custom", text_color=(0.18, 0.57, 0.87, 1))
-                icon.bind(on_release=partial(self.download_link, link.url, link.label))
-                row.add_widget(icon)
-                wrapper.add_widget(row)
-        else:
-            wrapper.add_widget(MDLabel(text="No download links found.", halign="center", text_color=(1, 0.6, 0.6, 1)))
+                wrapper.add_widget(MDLabel(text=f"{key}: {value}", adaptive_height=True, halign="center", text_color=(0.8, 0.9, 1, 1)))
+
+        # centered "Generate Download Links" button
+        btn_row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48))
+        btn_row.add_widget(MDLabel(size_hint_x=1))
+        gen_btn = MDButton(md_bg_color=(0.13, 0.55, 0.13, 1))
+        gen_btn.add_widget(MDButtonText(text="Generate Download Links"))
+        gen_btn.bind(on_release=self._on_generate_links)
+        btn_row.add_widget(gen_btn)
+        btn_row.add_widget(MDLabel(size_hint_x=1))
+        wrapper.add_widget(btn_row)
+
+        self._links_container = MDBoxLayout(orientation="vertical", spacing=dp(8), adaptive_height=True)
+        wrapper.add_widget(self._links_container)
         self.ids.content.add_widget(wrapper)
 
-    def download_link(self, url: str, label: str, *_args) -> None:
+    def _on_generate_links(self, *_args) -> None:
         app = MDApp.get_running_app()
-        self.set_status(f"Downloading {label}...")
-        app.start_download(url, label)
+        if not self._links_container:
+            return
+        self._links_container.clear_widgets()
+        self._links_container.add_widget(
+            MDLabel(text="Generating links, please wait...", halign="center",
+                    text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(32))
+        )
+        app.fetch_download_links_async(self._movie_url, self._render_links, self._links_error)
+
+    def _render_links(self, links: list) -> None:
+        if not self._links_container:
+            return
+        self._links_container.clear_widgets()
+        if not links:
+            self._links_container.add_widget(
+                MDLabel(text="No download links found.", halign="center", text_color=(1, 0.6, 0.6, 1))
+            )
+            return
+        self._links_container.add_widget(
+            MDLabel(text="Download Links", bold=True, halign="center", size_hint_y=None, height=dp(28), text_color=(1, 0.85, 0.3, 1))
+        )
+        for link in links:
+            size_str = self._fmt_size(link.file_size_bytes)
+            row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(8), padding=(dp(4), 0))
+            info = MDBoxLayout(orientation="vertical")
+            info.add_widget(MDLabel(text=link.label, text_color=(1, 1, 1, 1), shorten=True, halign="center", size_hint_y=None, height=dp(28)))
+            info.add_widget(MDLabel(text=size_str, text_color=(0.6, 0.85, 1, 1), halign="center", size_hint_y=None, height=dp(22)))
+            row.add_widget(info)
+            dl_icon = MDIconButton(
+                icon="download",
+                theme_text_color="Custom",
+                text_color=(0.18, 0.57, 0.87, 1),
+                size_hint_x=None,
+                width=dp(48),
+            )
+            dl_icon.bind(on_release=partial(self._queue_link, link.url, link.label))
+            row.add_widget(dl_icon)
+            self._links_container.add_widget(row)
+
+    def _links_error(self, message: str) -> None:
+        if not self._links_container:
+            return
+        self._links_container.clear_widgets()
+        self._links_container.add_widget(
+            MDLabel(text=f"Error: {message}", halign="center", text_color=(1, 0.5, 0.5, 1))
+        )
+
+    def _queue_link(self, url: str, label: str, *_args) -> None:
+        app = MDApp.get_running_app()
+        self.set_status(f"Queued: {label}")
+        app.enqueue_download(url, label)
         app.open_download_screen()
 
-    def show_download_complete(self, message: str) -> None:
-        self.clear_content()
-        self.set_status(message)
-        self.ids.content.add_widget(MDLabel(text=message, halign="center", text_color=(0.76, 1.0, 0.76, 1)))
+    def _fmt_size(self, size: int) -> str:
+        if size <= 0:
+            return "Size unknown"
+        units = ["B", "KB", "MB", "GB"]
+        s = float(size)
+        for unit in units:
+            if s < 1024.0 or unit == units[-1]:
+                return f"{s:.1f} {unit}"
+            s /= 1024.0
 
     def show_error(self, message: str) -> None:
         self.clear_content()
@@ -245,56 +306,115 @@ class MovieDetailScreen(BaseContentScreen):
 
 
 class DownloadScreen(BaseContentScreen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._active_job_id: str | None = None
+        self._progress_bar: ProgressBar | None = None
+        self._progress_label: MDLabel | None = None
+
     def on_pre_enter(self, *args):
-        self.render_download_state()
+        self.refresh()
 
-    def render_download_state(self) -> None:
+    def refresh(self) -> None:
+        """Full rebuild — only called on structural changes (new job, completion, cancel)."""
         app = MDApp.get_running_app()
-        progress = app.state.download_progress
+        jobs = app.state.download_jobs
         self.clear_content()
+        self._progress_bar = None
+        self._progress_label = None
+        self._active_job_id = None
 
-        header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
-        back_button = MDButton(md_bg_color=(0.17, 0.19, 0.27, 1), size_hint_x=None, width=dp(120))
-        back_button.add_widget(MDButtonText(text="Back"))
-        back_button.bind(on_release=lambda *_: app.go_back_from_downloads())
-        header.add_widget(back_button)
-        header.add_widget(MDLabel(text="Live Download", bold=True, halign="center", text_color=(1, 1, 1, 1)))
-        header.add_widget(MDLabel(text="", size_hint_x=None, width=dp(120)))
+        active = next((j for j in jobs if j.status == JobStatus.DOWNLOADING), None)
+        pending = [j for j in jobs if j.status == JobStatus.PENDING]
+        done = [j for j in jobs if j.status in (JobStatus.DONE, JobStatus.CANCELLED, JobStatus.ERROR)]
 
-        panel = MDCard(md_bg_color=(0.10, 0.12, 0.16, 1), radius=[dp(18), dp(18), dp(18), dp(18)], padding=dp(16), size_hint_y=None)
-        panel.bind(minimum_height=panel.setter("height"))
-        content = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None)
-        content.bind(minimum_height=content.setter("height"))
-        content.add_widget(header)
-        content.add_widget(MDLabel(text=progress.title or "No active download", bold=True, halign="center", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(34)))
-        content.add_widget(MDLabel(text=progress.status, halign="center", text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(28)))
+        if not jobs:
+            self.ids.content.add_widget(MDLabel(text="No downloads yet.", halign="center", text_color=(0.8, 0.9, 1, 1)))
+            return
 
-        bar = ProgressBar(max=100, value=progress.percent, size_hint_y=None, height=dp(18))
-        content.add_widget(bar)
-        content.add_widget(MDLabel(text=f"{progress.percent:.1f}%", halign="center", text_color=(1, 0.85, 0.3, 1), size_hint_y=None, height=dp(28)))
-        content.add_widget(MDLabel(text=f"Downloaded: {self._format_bytes(progress.downloaded_bytes)}", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24)))
-        content.add_widget(MDLabel(text=f"Total: {self._format_bytes(progress.total_bytes)}", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24)))
-        if progress.file_path:
-            content.add_widget(MDLabel(text=f"Saved to: {progress.file_path}", halign="center", text_color=(0.8, 0.9, 1, 1), size_hint_y=None, height=dp(24)))
+        if active:
+            card, bar, label = self._active_card(active)
+            self._active_job_id = active.id
+            self._progress_bar = bar
+            self._progress_label = label
+            self.ids.content.add_widget(card)
 
-        panel.add_widget(content)
-        self.ids.content.add_widget(panel)
+        if pending:
+            self.ids.content.add_widget(MDLabel(text="Queue", bold=True, size_hint_y=None, height=dp(28), text_color=(1, 0.85, 0.3, 1)))
+            for job in pending:
+                self.ids.content.add_widget(self._queue_card(job))
 
-    def update_progress(self, progress: DownloadProgress) -> None:
-        app = MDApp.get_running_app()
-        app.state.download_progress = progress
-        self.render_download_state()
+        if done:
+            self.ids.content.add_widget(MDLabel(text="Completed", bold=True, size_hint_y=None, height=dp(28), text_color=(0.6, 0.9, 0.6, 1)))
+            for job in reversed(done):
+                self.ids.content.add_widget(self._done_card(job))
 
-    def show_complete(self, progress: DownloadProgress) -> None:
-        self.update_progress(progress)
+    def update_active_progress(self, job: DownloadJob) -> None:
+        """Update only the progress bar and label in-place — no widget rebuild."""
+        if job.id != self._active_job_id or self._progress_bar is None or self._progress_label is None:
+            # Structure changed (new active job or job finished) — do full rebuild
+            self.refresh()
+            return
+        self._progress_bar.value = job.percent
+        self._progress_label.text = f"{job.percent:.1f}%  —  {self._fmt(job.downloaded_bytes)} / {self._fmt(job.total_bytes)}"
 
-    def show_error(self, message: str) -> None:
-        self.clear_content()
-        self.ids.content.add_widget(MDLabel(text=message, halign="center", text_color=(1, 0.68, 0.68, 1)))
+    def _active_card(self, job: DownloadJob) -> tuple[MDCard, ProgressBar, MDLabel]:
+        card = MDCard(md_bg_color=(0.10, 0.12, 0.16, 1), radius=[dp(14)] * 4, padding=dp(14), size_hint_y=None)
+        card.bind(minimum_height=card.setter("height"))
+        col = MDBoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
+        col.bind(minimum_height=col.setter("height"))
 
-    def _format_bytes(self, value: int) -> str:
+        header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36))
+        header.add_widget(MDLabel(text=job.title, bold=True, text_color=(1, 1, 1, 1), shorten=True))
+        cancel_btn = MDButton(md_bg_color=(0.75, 0.18, 0.18, 1), size_hint_x=None, width=dp(90))
+        cancel_btn.add_widget(MDButtonText(text="Cancel"))
+        cancel_btn.bind(on_release=partial(self._cancel_job, job.id))
+        header.add_widget(cancel_btn)
+        col.add_widget(header)
+
+        bar = ProgressBar(max=100, value=job.percent, size_hint_y=None, height=dp(14))
+        pct_label = MDLabel(
+            text=f"{job.percent:.1f}%  —  {self._fmt(job.downloaded_bytes)} / {self._fmt(job.total_bytes)}",
+            halign="center", text_color=(1, 0.85, 0.3, 1), size_hint_y=None, height=dp(24),
+        )
+        col.add_widget(bar)
+        col.add_widget(pct_label)
+        card.add_widget(col)
+        return card, bar, pct_label
+
+    def _queue_card(self, job: DownloadJob) -> MDCard:
+        card = MDCard(md_bg_color=(0.10, 0.14, 0.20, 1), radius=[dp(10)] * 4, padding=dp(10),
+                      size_hint_y=None, height=dp(52))
+        row = MDBoxLayout(orientation="horizontal", spacing=dp(8))
+        row.add_widget(MDIconButton(icon="clock-outline", theme_text_color="Custom", text_color=(0.6, 0.7, 1, 1)))
+        row.add_widget(MDLabel(text=job.title, text_color=(0.85, 0.9, 1, 1), shorten=True))
+        cancel_btn = MDButton(md_bg_color=(0.5, 0.15, 0.15, 1), size_hint_x=None, width=dp(80))
+        cancel_btn.add_widget(MDButtonText(text="Remove"))
+        cancel_btn.bind(on_release=partial(self._cancel_job, job.id))
+        row.add_widget(cancel_btn)
+        card.add_widget(row)
+        return card
+
+    def _done_card(self, job: DownloadJob) -> MDCard:
+        is_error = job.status == JobStatus.ERROR
+        is_cancelled = job.status == JobStatus.CANCELLED
+        color = (1, 0.4, 0.4, 1) if is_error else (0.6, 0.6, 0.6, 1) if is_cancelled else (0.4, 0.9, 0.5, 1)
+        icon = "alert-circle" if is_error else "cancel" if is_cancelled else "check-circle"
+        card = MDCard(md_bg_color=(0.08, 0.10, 0.14, 1), radius=[dp(10)] * 4, padding=dp(10),
+                      size_hint_y=None, height=dp(52))
+        row = MDBoxLayout(orientation="horizontal", spacing=dp(8))
+        row.add_widget(MDIconButton(icon=icon, theme_text_color="Custom", text_color=color))
+        label = job.error if is_error else job.title
+        row.add_widget(MDLabel(text=label, text_color=color, shorten=True))
+        card.add_widget(row)
+        return card
+
+    def _cancel_job(self, job_id: str, *_args) -> None:
+        MDApp.get_running_app().cancel_job(job_id)
+
+    def _fmt(self, value: int) -> str:
         if value <= 0:
-            return "Unknown"
+            return "?"
         units = ["B", "KB", "MB", "GB"]
         size = float(value)
         for unit in units:

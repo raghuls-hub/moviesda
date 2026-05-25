@@ -46,11 +46,34 @@ class DownloadProgress:
     completed: bool = False
 
 
+class JobStatus:
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    DONE = "done"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+
+
+@dataclass
+class DownloadJob:
+    id: str
+    title: str
+    url: str
+    referer: str = ""
+    status: str = JobStatus.PENDING
+    percent: float = 0.0
+    downloaded_bytes: int = 0
+    total_bytes: int = 0
+    file_path: str = ""
+    error: str = ""
+
+
 @dataclass(frozen=True)
 class QualityLink:
     label: str
     url: str
     kind: str = "server"
+    file_size_bytes: int = 0
 
 
 @dataclass(frozen=True)

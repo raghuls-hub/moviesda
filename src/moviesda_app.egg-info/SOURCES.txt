@@ -13,5 +13,6 @@ src/moviesda_app.egg-info/requires.txt
 src/moviesda_app.egg-info/top_level.txt
 src/moviesda_app/services/__init__.py
 src/moviesda_app/services/downloader.py
+src/moviesda_app/services/queue_manager.py
 src/moviesda_app/services/source.py
 src/moviesda_app/ui/screens.py

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from moviesda_app.models import DownloadProgress, MovieCard, MovieDetail, YearOption
+from moviesda_app.models import MovieCard, MovieDetail, YearOption, DownloadJob
 
 
 @dataclass
@@ -16,7 +16,7 @@ class AppState:
     current_site_page: int = 1
     available_pages: list[int] = field(default_factory=list)
     movie_detail: MovieDetail | None = None
-    download_progress: DownloadProgress = field(default_factory=DownloadProgress)
+    download_jobs: list[DownloadJob] = field(default_factory=list)
     last_screen: str = "years"
     current_page: int = 0
     status_message: str = ""

@@ -29,6 +29,7 @@ class DownloadService:
         url: str,
         referer: str | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        on_file_open: Callable[[str], None] | None = None,
     ) -> DownloadResult:
         headers = {}
         if referer:
@@ -39,6 +40,8 @@ class DownloadService:
         file_path = self._unique_path(self.download_dir / file_name)
         total_bytes = int(response.headers.get("content-length") or 0)
         downloaded_bytes = 0
+        if on_file_open:
+            on_file_open(str(file_path))
         with file_path.open("wb") as handle:
             for chunk in response.iter_content(chunk_size=1024 * 256):
                 if chunk:
