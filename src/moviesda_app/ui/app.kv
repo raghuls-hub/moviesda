@@ -1,0 +1,196 @@
+#:import dp kivy.metrics.dp
+
+<YearSelectionScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(16)
+        spacing: dp(12)
+        md_bg_color: 0.05, 0.06, 0.09, 1
+
+        MDBoxLayout:
+            size_hint_y: None
+            height: dp(56)
+            adaptive_height: False
+            MDLabel:
+                text: "Year Selection"
+                bold: True
+                color: 1, 1, 1, 1
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.open_download_screen()
+                md_bg_color: 0.17, 0.19, 0.27, 1
+                MDButtonText:
+                    text: "Downloads"
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: root.load_years()
+                md_bg_color: 0.13, 0.39, 0.85, 1
+                MDButtonText:
+                    text: "Refresh"
+
+        MDLabel:
+            id: status
+            text: "Ready"
+            size_hint_y: None
+            height: dp(28)
+            color: 0.78, 0.86, 1, 1
+
+        MDScrollView:
+            do_scroll_x: False
+            MDGridLayout:
+                id: content
+                cols: 1
+                spacing: dp(12)
+                padding: dp(2)
+                adaptive_height: True
+
+<MovieListScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(16)
+        spacing: dp(12)
+        md_bg_color: 0.05, 0.06, 0.09, 1
+
+        MDBoxLayout:
+            size_hint_y: None
+            height: dp(56)
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.root.current = "years"
+                md_bg_color: 0.13, 0.39, 0.85, 1
+                MDButtonText:
+                    text: "Back"
+            MDLabel:
+                text: "Movie List"
+                bold: True
+                halign: "center"
+                color: 1, 1, 1, 1
+            MDBoxLayout:
+                size_hint_x: None
+                width: dp(160)
+                spacing: dp(8)
+                MDButton:
+                    on_release: app.open_download_screen()
+                    md_bg_color: 0.17, 0.19, 0.27, 1
+                    MDButtonText:
+                        text: "Downloads"
+                MDButton:
+                    on_release: root.previous_page()
+                    md_bg_color: 0.17, 0.19, 0.27, 1
+                    MDButtonText:
+                        text: "Prev"
+                MDButton:
+                    on_release: root.next_page()
+                    md_bg_color: 0.13, 0.39, 0.85, 1
+                    MDButtonText:
+                        text: "Next"
+
+        MDLabel:
+            id: status
+            text: "Ready"
+            size_hint_y: None
+            height: dp(28)
+            color: 0.78, 0.86, 1, 1
+
+        MDScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                id: content
+                orientation: "vertical"
+                spacing: dp(12)
+                padding: dp(2)
+                adaptive_height: True
+
+<MovieDetailScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(16)
+        spacing: dp(12)
+        md_bg_color: 0.05, 0.06, 0.09, 1
+
+        MDBoxLayout:
+            size_hint_y: None
+            height: dp(56)
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.root.current = "movies"
+                md_bg_color: 0.13, 0.39, 0.85, 1
+                MDButtonText:
+                    text: "Back"
+            MDLabel:
+                text: "Movie Detail"
+                bold: True
+                halign: "center"
+                color: 1, 1, 1, 1
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.open_download_screen()
+                md_bg_color: 0.17, 0.19, 0.27, 1
+                MDButtonText:
+                    text: "Downloads"
+
+        MDLabel:
+            id: status
+            text: "Ready"
+            size_hint_y: None
+            height: dp(28)
+            color: 0.78, 0.86, 1, 1
+
+        MDScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                id: content
+                orientation: "vertical"
+                spacing: dp(12)
+                padding: dp(2)
+                adaptive_height: True
+
+<DownloadScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(16)
+        spacing: dp(12)
+        md_bg_color: 0.05, 0.06, 0.09, 1
+
+        MDBoxLayout:
+            size_hint_y: None
+            height: dp(56)
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.go_back_from_downloads()
+                md_bg_color: 0.17, 0.19, 0.27, 1
+                MDButtonText:
+                    text: "Back"
+            MDLabel:
+                text: "Downloading"
+                bold: True
+                halign: "center"
+                color: 1, 1, 1, 1
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.cancel_current_download()
+                md_bg_color: 0.70, 0.22, 0.22, 1
+                MDButtonText:
+                    text: "Cancel"
+            MDButton:
+                pos_hint: {"center_y": 0.5}
+                on_release: app.open_download_screen()
+                md_bg_color: 0.13, 0.39, 0.85, 1
+                MDButtonText:
+                    text: "Refresh"
+
+        MDLabel:
+            id: status
+            text: "Ready"
+            size_hint_y: None
+            height: dp(28)
+            color: 0.78, 0.86, 1, 1
+
+        MDScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                id: content
+                orientation: "vertical"
+                spacing: dp(12)
+                padding: dp(2)
+                adaptive_height: True

@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/moviesda_app/__init__.py
+src/moviesda_app/config.py
+src/moviesda_app/main.py
+src/moviesda_app/models.py
+src/moviesda_app/state.py
+src/moviesda_app.egg-info/PKG-INFO
+src/moviesda_app.egg-info/SOURCES.txt
+src/moviesda_app.egg-info/dependency_links.txt
+src/moviesda_app.egg-info/entry_points.txt
+src/moviesda_app.egg-info/requires.txt
+src/moviesda_app.egg-info/top_level.txt
+src/moviesda_app/services/__init__.py
+src/moviesda_app/services/downloader.py
+src/moviesda_app/services/source.py
+src/moviesda_app/ui/screens.py

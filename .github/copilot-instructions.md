@@ -1,0 +1,6 @@
+- Keep the project focused on licensed, lawful media sources only.
+- Prefer uv for dependency management and execution.
+- Keep UI light, structured, and content-first with deep blue accents.
+- Preserve the existing KivyMD screen flow: years, movie list, detail, download.
+- Use concise comments only when code is not self-explanatory.
+- Update README whenever run steps or configuration change.

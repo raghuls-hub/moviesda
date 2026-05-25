@@ -1,0 +1,2 @@
+[console_scripts]
+moviesda-app = moviesda_app.main:main

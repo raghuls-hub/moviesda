@@ -1,0 +1,1 @@
+"""MoviesDA KivyMD app package."""
