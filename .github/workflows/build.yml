@@ -49,33 +49,44 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-      - name: Accept Android SDK licenses
+      - name: Install Android SDK cmdline-tools and accept licenses
         run: |
-          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-          # Accept all standard Android SDK licenses
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          echo "504667f4c0de7af1a06de9f4b1727b84351f2910" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
-          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > ~/.buildozer/android/platform/android-sdk/licenses/google-gdk-license
-          echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > ~/.buildozer/android/platform/android-sdk/licenses/mips-android-sysimage-license
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-extract
+          mv /tmp/cmdline-tools-extract/cmdline-tools "$SDK/cmdline-tools/latest"
+          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
+          # Accept all licenses non-interactively
+          yes | sdkmanager --sdk_root="$SDK" --licenses || true
+          # Install required build-tools and platform
+          yes | sdkmanager --sdk_root="$SDK" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools" || true
+
+      - name: Accept Android SDK licenses (hash files fallback)
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK/licenses"
+          printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e" > "$SDK/licenses/android-sdk-license"
+          printf "\n84831b9409646a918e30573bab4c9c91346d8abd" > "$SDK/licenses/android-sdk-preview-license"
+          printf "\n33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > "$SDK/licenses/google-gdk-license"
+          printf "\nd975f751698a77b662f1254ddbeed3901e976f5a" > "$SDK/licenses/intel-android-extra-license"
+          printf "\ne9acab5b5fbb560a72cfaecce8946896ff6aab9d" > "$SDK/licenses/mips-android-sysimage-license"
 
       - name: Build APK
         run: |
-          # Accept licenses via sdkmanager if SDK is already installed
-          if [ -f ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager ]; then
-            yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
-          fi
+          export SDK="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
           buildozer -v android debug 2>&1 | tee build.log
 
-      - name: Accept licenses mid-build if SDK installed
+      - name: Retry with license re-acceptance on failure
         if: failure()
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-          if [ -f "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          fi
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          yes | sdkmanager --sdk_root="$SDK" --licenses || true
           buildozer -v android debug 2>&1 | tee build_retry.log
 
       - name: Upload APK

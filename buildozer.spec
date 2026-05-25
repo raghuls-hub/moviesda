@@ -17,7 +17,6 @@ fullscreen = 0
 android.api = 33
 android.minapi = 26
 android.ndk = 25b
-android.sdk = 33
 android.build_tools_version = 33.0.2
 android.archs = arm64-v8a, armeabi-v7a
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,FOREGROUND_SERVICE,POST_NOTIFICATIONS
