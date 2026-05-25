@@ -1,4 +1,4 @@
-from src.moviesda_app.main import main
+from moviesda_app.main import main
 
 
 if __name__ == "__main__":

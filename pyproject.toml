@@ -13,8 +13,12 @@ dependencies = [
   "kivy>=2.3.0",
   "kivymd @ git+https://github.com/kivymd/KivyMD.git",
   "requests>=2.32.3",
-  "watchdog>=6.0.0",
   "plyer>=2.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "watchdog>=6.0.0",
 ]
 
 [project.scripts]

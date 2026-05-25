@@ -34,18 +34,6 @@ class DownloadOption:
     url: str
 
 
-@dataclass(frozen=True)
-class DownloadProgress:
-    title: str = ""
-    url: str = ""
-    status: str = "Idle"
-    percent: float = 0.0
-    downloaded_bytes: int = 0
-    total_bytes: int = 0
-    file_path: str = ""
-    completed: bool = False
-
-
 class JobStatus:
     PENDING = "pending"
     DOWNLOADING = "downloading"

@@ -105,13 +105,12 @@ class MovieListScreen(BaseContentScreen):
         self.ids.content.add_widget(self._build_pagination_section())
 
     def _top_controls(self) -> MDBoxLayout:
+        # kept for potential future use
         app = MDApp.get_running_app()
         bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
-        spacer = MDLabel(text="", size_hint_x=1)
         downloads = MDButton(md_bg_color=(0.13, 0.39, 0.85, 1), size_hint_x=None, width=dp(140))
         downloads.add_widget(MDButtonText(text="Downloads"))
         downloads.bind(on_release=lambda *_: app.open_download_screen())
-        # bar.add_widget(spacer)
         bar.add_widget(downloads)
         return bar
 
@@ -198,11 +197,16 @@ class MovieListScreen(BaseContentScreen):
 class MovieDetailScreen(BaseContentScreen):
     def load_movie(self, movie: MovieCard) -> None:
         app = MDApp.get_running_app()
+        self._current_movie = movie
         self._movie_url = movie.url
         self._links_container: MDBoxLayout | None = None
         self.clear_content()
         self.set_status("Loading...")
         app.load_movie_detail_fast_async(movie.url, self.render_detail, self.show_error)
+
+    def refresh(self) -> None:
+        if hasattr(self, "_current_movie") and self._current_movie:
+            self.load_movie(self._current_movie)
 
     def render_detail(self, detail: MovieDetail) -> None:
         app = MDApp.get_running_app()
@@ -243,7 +247,26 @@ class MovieDetailScreen(BaseContentScreen):
             MDLabel(text="Generating links, please wait...", halign="center",
                     text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(32))
         )
-        app.fetch_download_links_async(self._movie_url, self._render_links, self._links_error)
+        app.fetch_download_links_async(
+            self._movie_url,
+            self._render_links,
+            self._links_error,
+            on_series=self._on_series_detected,
+        )
+
+    def _on_series_detected(self, message: str) -> None:
+        if not self._links_container:
+            return
+        self._links_container.clear_widgets()
+        self._links_container.add_widget(
+            MDLabel(
+                text="⚠ This is not a movie, it is a series.",
+                halign="center",
+                adaptive_height=True,
+                text_color=(1, 0.2, 0.2, 1),
+                bold=True,
+            )
+        )
 
     def _render_links(self, links: list) -> None:
         if not self._links_container:
@@ -298,6 +321,7 @@ class MovieDetailScreen(BaseContentScreen):
             if s < 1024.0 or unit == units[-1]:
                 return f"{s:.1f} {unit}"
             s /= 1024.0
+        return f"{s:.1f} GB"  # unreachable but satisfies return type
 
     def show_error(self, message: str) -> None:
         self.clear_content()

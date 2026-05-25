@@ -67,13 +67,18 @@
                 color: 1, 1, 1, 1
             MDBoxLayout:
                 size_hint_x: None
-                width: dp(160)
+                width: dp(200)
                 spacing: dp(8)
                 MDButton:
                     on_release: app.open_download_screen()
                     md_bg_color: 0.17, 0.19, 0.27, 1
                     MDButtonText:
                         text: "Downloads"
+                MDButton:
+                    on_release: root.load_movies()
+                    md_bg_color: 0.13, 0.39, 0.85, 1
+                    MDButtonText:
+                        text: "Refresh"
 
         MDLabel:
             id: status
@@ -112,12 +117,22 @@
                 bold: True
                 halign: "center"
                 color: 1, 1, 1, 1
-            MDButton:
-                pos_hint: {"center_y": 0.5}
-                on_release: app.open_download_screen()
-                md_bg_color: 0.17, 0.19, 0.27, 1
-                MDButtonText:
-                    text: "Downloads"
+            MDBoxLayout:
+                size_hint_x: None
+                width: dp(200)
+                spacing: dp(8)
+                MDButton:
+                    pos_hint: {"center_y": 0.5}
+                    on_release: app.open_download_screen()
+                    md_bg_color: 0.17, 0.19, 0.27, 1
+                    MDButtonText:
+                        text: "Downloads"
+                MDButton:
+                    pos_hint: {"center_y": 0.5}
+                    on_release: root.refresh()
+                    md_bg_color: 0.13, 0.39, 0.85, 1
+                    MDButtonText:
+                        text: "Refresh"
 
         MDLabel:
             id: status

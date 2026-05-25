@@ -15,12 +15,12 @@ class DownloadQueueManager:
         self._service = download_service
         self._on_update = on_update
         self._queue: queue.Queue[DownloadJob] = queue.Queue()
-        self._jobs: dict[str, DownloadJob] = {}          # id -> job (all jobs ever added)
+        self._jobs: dict[str, DownloadJob] = {}
         self._lock = threading.Lock()
         self._cancel_active = threading.Event()
         self._active_id: str | None = None
-        self._active_file: str | None = None
-        self._worker = threading.Thread(target=self._run, daemon=True)
+        # non-daemon so downloads survive app backgrounding
+        self._worker = threading.Thread(target=self._run, daemon=False, name="download-worker")
         self._worker.start()
 
     # ------------------------------------------------------------------ public
@@ -56,23 +56,30 @@ class DownloadQueueManager:
         with self._lock:
             return list(self._jobs.values())
 
+    def shutdown(self) -> None:
+        """Signal the worker to exit after finishing the current job."""
+        self._queue.put(None)  # type: ignore[arg-type]  # sentinel
+
     # ----------------------------------------------------------------- private
 
     def _run(self) -> None:
         while True:
             job = self._queue.get()
+            if job is None:  # shutdown sentinel
+                self._queue.task_done()
+                return
             with self._lock:
                 current = self._jobs.get(job.id)
             if current is None or current.status == JobStatus.CANCELLED:
                 self._queue.task_done()
                 continue
-            self._process(current)  # use latest state, not stale queue entry
+            self._process(current)
             self._queue.task_done()
 
     def _process(self, job: DownloadJob) -> None:
         self._cancel_active.clear()
         self._active_id = job.id
-        self._active_file = None
+        active_file: list[str] = []  # mutable cell so closure can write to it
 
         job = self._replace(job, status=JobStatus.DOWNLOADING)
         self._on_update(job)
@@ -81,14 +88,14 @@ class DownloadQueueManager:
             if self._cancel_active.is_set():
                 raise InterruptedError
             percent = (downloaded / total * 100) if total else 0.0
-            # read latest file_path so on_file_open value is not lost
             with self._lock:
                 current = self._jobs.get(job.id, job)
             updated = self._replace(current, percent=percent, downloaded_bytes=downloaded, total_bytes=total)
             self._on_update(updated)
 
         def on_file_open(path: str) -> None:
-            self._active_file = path
+            active_file.clear()
+            active_file.append(path)
             with self._lock:
                 current = self._jobs.get(job.id, job)
                 updated = DownloadJob(
@@ -119,8 +126,8 @@ class DownloadQueueManager:
                     file_path=str(result.file_path),
                 )
         except InterruptedError:
-            if self._active_file:
-                Path(self._active_file).unlink(missing_ok=True)
+            if active_file:
+                Path(active_file[0]).unlink(missing_ok=True)
             finished = self._replace(job, status=JobStatus.CANCELLED, percent=0.0)
         except Exception as exc:  # noqa: BLE001
             finished = self._replace(job, status=JobStatus.ERROR, error=str(exc))

@@ -14,6 +14,9 @@ from moviesda_app.models import DownloadOption, MovieCard, MovieDetail, MoviePag
 MEDIA_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov")
 
 
+class SeriesDetectedError(Exception):
+    """Raised when the crawl entry point looks like a TV series, not a movie."""
+
 @dataclass
 class SourceService:
     base_url: str = ""
@@ -200,8 +203,17 @@ class SourceService:
         synopsis = self._extract_synopsis(soup)
         return MovieDetail(title=title, url=movie_url, poster_url=poster_url, synopsis=synopsis, metadata=metadata, links=[])
 
+    def check_is_series(self, movie_url: str, base_url: str) -> bool:
+        """Fetch the first crawl level and return True if any link label contains 'season'."""
+        level1 = self.get_div_f_links(movie_url, base_url)
+        return any("season" in item["label"].lower() for item in level1)
+
     def fetch_download_links(self, movie_url: str, base_url: str) -> list[QualityLink]:
-        """Crawl for download links and probe each for file size via HEAD."""
+        """Crawl for download links and probe each for file size via HEAD.
+        Raises SeriesDetectedError if the entry point looks like a TV series.
+        """
+        if self.check_is_series(movie_url, base_url):
+            raise SeriesDetectedError("This is not a movie, it is a series.")
         response = self.get(movie_url, referer=base_url)
         soup = BeautifulSoup(response.text, "html.parser")
         options = self._extract_quality_links(soup, movie_url, base_url)

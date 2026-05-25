@@ -13,7 +13,7 @@ from moviesda_app.config import AppConfig
 from moviesda_app.models import DownloadJob, JobStatus, MoviePage, YearOption
 from moviesda_app.services.downloader import DownloadService
 from moviesda_app.services.queue_manager import DownloadQueueManager
-from moviesda_app.services.source import SourceService
+from moviesda_app.services.source import SeriesDetectedError, SourceService
 from moviesda_app.state import AppState
 from moviesda_app.ui.screens import DownloadScreen, MovieDetailScreen, MovieListScreen, YearSelectionScreen
 
@@ -55,6 +55,10 @@ class MovieBrowserApp(MDApp):
     def on_start(self):
         self.state.status_message = "Ready"
 
+    def on_stop(self):
+        # Signal the worker to stop after finishing the current job
+        self.queue_manager.shutdown()
+
     # ---------------------------------------------------------------- queue
 
     def enqueue_download(self, url: str, title: str, referer: str | None = None) -> None:
@@ -92,16 +96,20 @@ class MovieBrowserApp(MDApp):
         if job.status == JobStatus.DOWNLOADING and self._last_notified_status.get(job.id) == JobStatus.DOWNLOADING:
             return
         self._last_notified_status[job.id] = job.status
+        # fire in a background thread so plyer never blocks the Kivy UI thread
+        self.executor.submit(self._notify_worker, job.status, job.title, job.error)
+
+    def _notify_worker(self, status: str, title: str, error: str) -> None:
         try:
             from plyer import notification  # noqa: PLC0415
             def _trunc(s: str, n: int = 60) -> str:
-                return s if len(s) <= n else s[:n - 1] + "…"
-            if job.status == JobStatus.DOWNLOADING:
-                notification.notify(title=_trunc("Downloading"), message=_trunc(job.title), app_name="MoviesDA", timeout=2)
-            elif job.status == JobStatus.DONE:
-                notification.notify(title=_trunc("Download complete"), message=_trunc(job.title), app_name="MoviesDA", timeout=4)
-            elif job.status == JobStatus.ERROR:
-                notification.notify(title=_trunc("Download failed"), message=_trunc(f"{job.title}: {job.error}"), app_name="MoviesDA", timeout=4)
+                return s if len(s) <= n else s[:n - 1] + "\u2026"
+            if status == JobStatus.DOWNLOADING:
+                notification.notify(title=_trunc("Downloading"), message=_trunc(title), app_name="MoviesDA", timeout=2)
+            elif status == JobStatus.DONE:
+                notification.notify(title=_trunc("Download complete"), message=_trunc(title), app_name="MoviesDA", timeout=4)
+            elif status == JobStatus.ERROR:
+                notification.notify(title=_trunc("Download failed"), message=_trunc(f"{title}: {error}"), app_name="MoviesDA", timeout=4)
         except Exception:  # noqa: BLE001
             pass
 
@@ -113,7 +121,13 @@ class MovieBrowserApp(MDApp):
         if self.root.current != "download":
             self.state.last_screen = self.root.current
         self.root.current = "download"
-        self.root.get_screen("download").refresh()
+        screen = self.root.get_screen("download")
+        # if a download is already active, update in-place instead of full rebuild
+        active = next((j for j in self.state.download_jobs if j.status == JobStatus.DOWNLOADING), None)
+        if active:
+            screen.update_active_progress(active)
+        else:
+            screen.refresh()
 
     def go_back_from_downloads(self) -> None:
         if not self.root:
@@ -179,11 +193,17 @@ class MovieBrowserApp(MDApp):
                 Clock.schedule_once(lambda *_: failure(str(err)))
         self.executor.submit(task)
 
-    def fetch_download_links_async(self, movie_url: str, success, failure):
+    def fetch_download_links_async(self, movie_url: str, success, failure, on_series=None):
         def task():
             try:
                 links = self.source_service.fetch_download_links(movie_url, self.state.base_url or movie_url)
                 Clock.schedule_once(lambda *_: success(links))
+            except SeriesDetectedError as exc:
+                msg = str(exc)
+                if on_series:
+                    Clock.schedule_once(lambda *_: on_series(msg))
+                else:
+                    Clock.schedule_once(lambda *_: failure(msg))
             except Exception as exc:  # noqa: BLE001
                 err = exc
                 Clock.schedule_once(lambda *_: failure(str(err)))
