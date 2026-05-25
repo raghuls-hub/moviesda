@@ -56,10 +56,13 @@ jobs:
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
           unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-extract
           mv /tmp/cmdline-tools-extract/cmdline-tools "$SDK/cmdline-tools/latest"
-          export PATH="$SDK/cmdline-tools/latest/bin:$PATH"
+          # Buildozer hardcodes tools/bin/sdkmanager — create a shim at that path
+          mkdir -p "$SDK/tools/bin"
+          ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$PATH"
           # Accept all licenses non-interactively
           yes | sdkmanager --sdk_root="$SDK" --licenses || true
-          # Install required build-tools and platform
+          # Pre-install required SDK components so buildozer doesn't prompt
           yes | sdkmanager --sdk_root="$SDK" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
@@ -77,15 +80,15 @@ jobs:
 
       - name: Build APK
         run: |
-          export SDK="$HOME/.buildozer/android/platform/android-sdk"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
           buildozer -v android debug 2>&1 | tee build.log
 
       - name: Retry with license re-acceptance on failure
         if: failure()
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
           yes | sdkmanager --sdk_root="$SDK" --licenses || true
           buildozer -v android debug 2>&1 | tee build_retry.log
 
