@@ -4,9 +4,7 @@ import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
-from threading import Event
 from typing import Callable
-import time
 
 import requests
 
@@ -31,8 +29,6 @@ class DownloadService:
         url: str,
         referer: str | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
-        cancel_event: Event | None = None,
-        pause_event: Event | None = None,
     ) -> DownloadResult:
         headers = {}
         if referer:
@@ -45,20 +41,6 @@ class DownloadService:
         downloaded_bytes = 0
         with file_path.open("wb") as handle:
             for chunk in response.iter_content(chunk_size=1024 * 256):
-                while pause_event and pause_event.is_set():
-                    if cancel_event and cancel_event.is_set():
-                        response.close()
-                        handle.close()
-                        if file_path.exists():
-                            file_path.unlink(missing_ok=True)
-                        raise RuntimeError("Download cancelled")
-                    time.sleep(0.2)
-                if cancel_event and cancel_event.is_set():
-                    response.close()
-                    handle.close()
-                    if file_path.exists():
-                        file_path.unlink(missing_ok=True)
-                    raise RuntimeError("Download cancelled")
                 if chunk:
                     handle.write(chunk)
                     downloaded_bytes += len(chunk)

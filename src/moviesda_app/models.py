@@ -47,15 +47,6 @@ class DownloadProgress:
 
 
 @dataclass(frozen=True)
-class DownloadHistoryItem:
-    title: str
-    url: str
-    status: str
-    percent: float = 0.0
-    file_path: str = ""
-
-
-@dataclass(frozen=True)
 class QualityLink:
     label: str
     url: str

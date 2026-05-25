@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
 
 from kivy.clock import Clock
 from kivy.lang import Builder
@@ -9,7 +8,7 @@ from kivy.uix.screenmanager import ScreenManager
 from kivymd.app import MDApp
 from pathlib import Path
 from moviesda_app.config import AppConfig
-from moviesda_app.models import DownloadHistoryItem, DownloadProgress, MoviePage, YearOption
+from moviesda_app.models import DownloadProgress, MoviePage, YearOption
 from moviesda_app.services.downloader import DownloadService
 from moviesda_app.services.source import SourceService
 from moviesda_app.state import AppState
@@ -31,8 +30,6 @@ class MovieBrowserApp(MDApp):
             timeout=self.config_data.request_timeout,
         )
         self.executor = ThreadPoolExecutor(max_workers=4)
-        self.download_cancel_event = Event()
-        self.download_pause_event = Event()
 
     def build(self):
         self.title = "MoviesDA App"
@@ -66,21 +63,6 @@ class MovieBrowserApp(MDApp):
                 print(f"[years] get_latest_year_link -> {latest_year_link}")
                 if not latest_year_link:
                     raise RuntimeError("Could not find a year index page.")
-            except Exception as exc:  # noqa: BLE001
-                err = str(exc)
-                if err == "Download cancelled":
-                    progress = DownloadProgress(
-                        title=title,
-                        url=url,
-                        status="Cancelled",
-                        percent=self.state.download_progress.percent,
-                        downloaded_bytes=self.state.download_progress.downloaded_bytes,
-                        total_bytes=self.state.download_progress.total_bytes,
-                        file_path=self.state.download_progress.file_path,
-                        completed=False,
-                    )
-                    Clock.schedule_once(lambda *_: self._apply_download_cancelled(progress))
-                    return
                 print(f"[years] Resolving home.html from {latest_year_link}...")
                 home_html = self.source_service.resolve_to_home_html(latest_year_link, base_url)
                 print(f"[years] resolve_to_home_html -> {home_html}")
@@ -137,8 +119,6 @@ class MovieBrowserApp(MDApp):
         self.root.current = target
 
     def start_download(self, url: str, title: str, referer: str | None = None) -> None:
-        self.download_cancel_event = Event()
-        self.download_pause_event = Event()
         self.state.download_progress = DownloadProgress(title=title, url=url, status="Starting download...", percent=0.0, downloaded_bytes=0, total_bytes=0, file_path="", completed=False)
         self.open_download_screen()
 
@@ -162,8 +142,6 @@ class MovieBrowserApp(MDApp):
                     url,
                     referer=referer or self.state.base_url or None,
                     progress_callback=progress_callback,
-                    cancel_event=self.download_cancel_event,
-                    pause_event=self.download_pause_event,
                 )
                 progress = DownloadProgress(
                     title=title,
@@ -183,63 +161,9 @@ class MovieBrowserApp(MDApp):
 
         self.executor.submit(task)
 
-    def toggle_pause_current_download(self) -> None:
-        if self.download_pause_event.is_set():
-            self.download_pause_event.clear()
-            status = "Resuming download..."
-        else:
-            self.download_pause_event.set()
-            status = "Paused"
-        current = self.state.download_progress
-        self.state.download_progress = DownloadProgress(
-            title=current.title,
-            url=current.url,
-            status=status,
-            percent=current.percent,
-            downloaded_bytes=current.downloaded_bytes,
-            total_bytes=current.total_bytes,
-            file_path=current.file_path,
-            completed=False,
-        )
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").update_from_state()
-
-    def cancel_current_download(self) -> None:
-        self.download_cancel_event.set()
-        self.download_pause_event.clear()
-        current = self.state.download_progress
-        self.state.download_progress = DownloadProgress(
-            title=current.title,
-            url=current.url,
-            status="Cancelled",
-            percent=current.percent,
-            downloaded_bytes=current.downloaded_bytes,
-            total_bytes=current.total_bytes,
-            file_path=current.file_path,
-            completed=False,
-        )
-        self._append_download_history(self.state.download_progress)
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").update_from_state()
-
     def _refresh_download_screen(self) -> None:
         if self.root and "download" in self.root.screen_names:
-            screen = self.root.get_screen("download")
-            screen.ensure_view()
-            screen.update_from_state()
-
-    def _append_download_history(self, progress: DownloadProgress) -> None:
-        self.state.download_history.insert(
-            0,
-            DownloadHistoryItem(
-                title=progress.title,
-                url=progress.url,
-                status=progress.status,
-                percent=progress.percent,
-                file_path=progress.file_path,
-            ),
-        )
-        self.state.download_history = self.state.download_history[:20]
+            self.root.get_screen("download").render_download_state()
 
     def _apply_download_progress(self, progress: DownloadProgress) -> None:
         self.state.download_progress = progress
@@ -248,21 +172,13 @@ class MovieBrowserApp(MDApp):
 
     def _apply_download_complete(self, progress: DownloadProgress) -> None:
         self.state.download_progress = progress
-        self._append_download_history(progress)
         if self.root and self.root.current == "download":
             self.root.get_screen("download").show_complete(progress)
 
     def _apply_download_error(self, message: str, progress: DownloadProgress) -> None:
         self.state.download_progress = progress
-        self._append_download_history(progress)
         if self.root and self.root.current == "download":
             self.root.get_screen("download").show_error(message)
-
-    def _apply_download_cancelled(self, progress: DownloadProgress) -> None:
-        self.state.download_progress = progress
-        self._append_download_history(progress)
-        if self.root and self.root.current == "download":
-            self.root.get_screen("download").update_from_state()
 
     def load_movie_detail_async(self, movie_url: str, success, failure):
         def task():

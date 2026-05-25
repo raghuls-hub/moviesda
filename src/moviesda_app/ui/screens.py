@@ -13,7 +13,7 @@ from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 
-from moviesda_app.models import DownloadHistoryItem, DownloadProgress, MovieCard, MovieDetail, MoviePage, YearOption
+from moviesda_app.models import DownloadProgress, MovieCard, MovieDetail, MoviePage, YearOption
 
 
 class BaseContentScreen(Screen):
@@ -156,10 +156,14 @@ class MovieListScreen(BaseContentScreen):
         self.load_movies()
 
     def _build_movie_card(self, movie: MovieCard) -> MDCard:
-        card = MDCard(radius=[dp(18), dp(18), dp(18), dp(18)], size_hint_y=None, height=dp(120), padding=dp(14), md_bg_color=(0.10, 0.12, 0.16, 1))
-        column = MDBoxLayout(orientation="vertical", spacing=dp(10))
-        column.add_widget(MDLabel(text=movie.title, bold=True, halign="center", shorten=True, size_hint_y=None, height=dp(40), text_color=(1, 1, 1, 1)))
-        action = MDButton(md_bg_color=(0.18, 0.57, 0.87, 1), size_hint_x=None, width=dp(140), pos_hint={"center_x": 0.5})
+        card = MDCard(radius=[dp(18), dp(18), dp(18), dp(18)], size_hint_y=None, height=dp(280), padding=dp(10), md_bg_color=(0.10, 0.12, 0.16, 1))
+        column = MDBoxLayout(orientation="vertical", spacing=dp(8))
+        if movie.poster_url:
+            column.add_widget(AsyncImage(source=movie.poster_url, size_hint_y=None, height=dp(170)))
+        else:
+            column.add_widget(MDLabel(text="[Poster]", markup=True, halign="center", size_hint_y=None, height=dp(170), text_color=(0.9, 0.9, 0.9, 1)))
+        column.add_widget(MDLabel(text=movie.title, bold=True, halign="center", shorten=True, size_hint_y=None, height=dp(36), text_color=(1, 1, 1, 1)))
+        action = MDButton(md_bg_color=(0.18, 0.57, 0.87, 1))
         action.add_widget(MDButtonText(text="Details"))
         action.bind(on_release=partial(self.open_detail, movie))
         column.add_widget(action)
@@ -242,115 +246,51 @@ class MovieDetailScreen(BaseContentScreen):
 
 class DownloadScreen(BaseContentScreen):
     def on_pre_enter(self, *args):
-        self.ensure_view()
-        self.update_from_state()
+        self.render_download_state()
 
-    def ensure_view(self) -> None:
-        if hasattr(self, "_download_ready") and self._download_ready:
-            return
+    def render_download_state(self) -> None:
+        app = MDApp.get_running_app()
+        progress = app.state.download_progress
         self.clear_content()
 
-        header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(8))
-        back_button = MDButton(md_bg_color=(0.17, 0.19, 0.27, 1), size_hint_x=None, width=dp(100))
+        header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(44), spacing=dp(8))
+        back_button = MDButton(md_bg_color=(0.17, 0.19, 0.27, 1), size_hint_x=None, width=dp(120))
         back_button.add_widget(MDButtonText(text="Back"))
-        back_button.bind(on_release=lambda *_: MDApp.get_running_app().go_back_from_downloads())
+        back_button.bind(on_release=lambda *_: app.go_back_from_downloads())
         header.add_widget(back_button)
-        self._download_title = MDLabel(text="Live Download", bold=True, halign="center", text_color=(1, 1, 1, 1))
-        header.add_widget(self._download_title)
-        self._pause_button = MDButton(md_bg_color=(0.18, 0.57, 0.87, 1), size_hint_x=None, width=dp(110))
-        self._pause_text = MDButtonText(text="Pause")
-        self._pause_button.add_widget(self._pause_text)
-        self._pause_button.bind(on_release=lambda *_: MDApp.get_running_app().toggle_pause_current_download())
-        header.add_widget(self._pause_button)
-        self._cancel_button = MDButton(md_bg_color=(0.70, 0.22, 0.22, 1), size_hint_x=None, width=dp(110))
-        self._cancel_button.add_widget(MDButtonText(text="Cancel"))
-        self._cancel_button.bind(on_release=lambda *_: MDApp.get_running_app().cancel_current_download())
-        header.add_widget(self._cancel_button)
+        header.add_widget(MDLabel(text="Live Download", bold=True, halign="center", text_color=(1, 1, 1, 1)))
+        header.add_widget(MDLabel(text="", size_hint_x=None, width=dp(120)))
 
         panel = MDCard(md_bg_color=(0.10, 0.12, 0.16, 1), radius=[dp(18), dp(18), dp(18), dp(18)], padding=dp(16), size_hint_y=None)
         panel.bind(minimum_height=panel.setter("height"))
         content = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None)
         content.bind(minimum_height=content.setter("height"))
         content.add_widget(header)
-        self._download_name = MDLabel(text="", bold=True, halign="center", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(34))
-        self._download_status = MDLabel(text="", halign="center", text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(28))
-        self._download_bar = ProgressBar(max=100, value=0, size_hint_y=None, height=dp(18))
-        self._download_percent = MDLabel(text="0.0%", halign="center", text_color=(1, 0.85, 0.3, 1), size_hint_y=None, height=dp(28))
-        self._download_bytes = MDLabel(text="Downloaded: Unknown", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24))
-        self._download_total = MDLabel(text="Total: Unknown", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24))
-        self._download_path = MDLabel(text="", halign="center", text_color=(0.8, 0.9, 1, 1), size_hint_y=None, height=dp(24))
-        self._retry_button = MDButton(md_bg_color=(0.13, 0.39, 0.85, 1), size_hint_y=None, height=dp(44), size_hint_x=None, width=dp(180), pos_hint={"center_x": 0.5})
-        self._retry_button.add_widget(MDButtonText(text="Retry"))
-        self._retry_button.bind(on_release=lambda *_: self.retry_current_download())
+        content.add_widget(MDLabel(text=progress.title or "No active download", bold=True, halign="center", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(34)))
+        content.add_widget(MDLabel(text=progress.status, halign="center", text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(28)))
 
-        content.add_widget(self._download_name)
-        content.add_widget(self._download_status)
-        content.add_widget(self._download_bar)
-        content.add_widget(self._download_percent)
-        content.add_widget(self._download_bytes)
-        content.add_widget(self._download_total)
-        content.add_widget(self._download_path)
-        content.add_widget(self._retry_button)
-
-        content.add_widget(MDLabel(text="Download history", bold=True, halign="center", text_color=(1, 0.85, 0.3, 1), size_hint_y=None, height=dp(28)))
-        self._history_box = MDBoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
-        self._history_box.bind(minimum_height=self._history_box.setter("height"))
-        content.add_widget(self._history_box)
+        bar = ProgressBar(max=100, value=progress.percent, size_hint_y=None, height=dp(18))
+        content.add_widget(bar)
+        content.add_widget(MDLabel(text=f"{progress.percent:.1f}%", halign="center", text_color=(1, 0.85, 0.3, 1), size_hint_y=None, height=dp(28)))
+        content.add_widget(MDLabel(text=f"Downloaded: {self._format_bytes(progress.downloaded_bytes)}", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24)))
+        content.add_widget(MDLabel(text=f"Total: {self._format_bytes(progress.total_bytes)}", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24)))
+        if progress.file_path:
+            content.add_widget(MDLabel(text=f"Saved to: {progress.file_path}", halign="center", text_color=(0.8, 0.9, 1, 1), size_hint_y=None, height=dp(24)))
 
         panel.add_widget(content)
         self.ids.content.add_widget(panel)
-        self._download_ready = True
-
-    def show_complete(self, progress: DownloadProgress) -> None:
-        self.ensure_view()
-        self.update_from_state()
 
     def update_progress(self, progress: DownloadProgress) -> None:
         app = MDApp.get_running_app()
         app.state.download_progress = progress
-        self.ensure_view()
-        self.update_from_state()
+        self.render_download_state()
+
+    def show_complete(self, progress: DownloadProgress) -> None:
+        self.update_progress(progress)
 
     def show_error(self, message: str) -> None:
-        self.ensure_view()
-        self._download_status.text = message
-        self._download_status.text_color = (1, 0.68, 0.68, 1)
-        self._retry_button.disabled = False
-        self._pause_button.disabled = True
-
-    def update_from_state(self) -> None:
-        app = MDApp.get_running_app()
-        progress = app.state.download_progress
-        self._download_name.text = progress.title or "No active download"
-        self._download_status.text = progress.status
-        self._download_status.text_color = (0.76, 1.0, 0.76, 1) if progress.completed else (0.78, 0.86, 1, 1)
-        self._download_bar.value = progress.percent if progress.total_bytes else 0
-        self._download_percent.text = f"{progress.percent:.1f}%" if progress.total_bytes else "Waiting for server size..."
-        self._download_bytes.text = f"Downloaded: {self._format_bytes(progress.downloaded_bytes)}"
-        self._download_total.text = f"Total: {self._format_bytes(progress.total_bytes)}"
-        self._download_path.text = f"Saved to: {progress.file_path}" if progress.file_path else ""
-        self._retry_button.disabled = progress.status not in {"Cancelled", "Error"} and not progress.completed
-        self._pause_button.disabled = progress.completed or progress.status in {"Cancelled", "Error"}
-        self._pause_text.text = "Resume" if app.download_pause_event.is_set() else "Pause"
-        self._render_history(app.state.download_history)
-
-    def retry_current_download(self) -> None:
-        app = MDApp.get_running_app()
-        progress = app.state.download_progress
-        if not progress.url:
-            return
-        app.start_download(progress.url, progress.title or "Download")
-
-    def _render_history(self, history: list[DownloadHistoryItem]) -> None:
-        self._history_box.clear_widgets()
-        if not history:
-            self._history_box.add_widget(MDLabel(text="No downloads yet.", halign="center", text_color=(0.9, 0.9, 0.9, 1), size_hint_y=None, height=dp(24)))
-            return
-        for item in history[:10]:
-            row = MDBoxLayout(orientation="vertical", spacing=dp(2), size_hint_y=None, height=dp(56))
-            row.add_widget(MDLabel(text=item.title, bold=True, text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(24)))
-            row.add_widget(MDLabel(text=f"{item.status} • {item.percent:.1f}%", text_color=(0.78, 0.86, 1, 1), size_hint_y=None, height=dp(20)))
-            self._history_box.add_widget(row)
+        self.clear_content()
+        self.ids.content.add_widget(MDLabel(text=message, halign="center", text_color=(1, 0.68, 0.68, 1)))
 
     def _format_bytes(self, value: int) -> str:
         if value <= 0:
