@@ -23,7 +23,7 @@ jobs:
 
       # ── Java ──────────────────────────────────────────────────────────────
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5 # v5 = Node.js 24
         with:
           java-version: "17"
           distribution: "temurin"
@@ -59,8 +59,7 @@ jobs:
             buildozer-${{ runner.os }}-
 
       # ── Android SDK + NDK ─────────────────────────────────────────────────
-      # NDK r23b is used — avoids the libthorvg IndexError bug in p4a
-      # that occurs with NDK r25b's changed clang lib directory layout.
+      # NDK r23b avoids the libthorvg IndexError bug present with NDK r25b
       - name: Install Android SDK, licenses, and NDK r23b
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
@@ -77,10 +76,8 @@ jobs:
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$PATH"
 
-          # Accept all licenses non-interactively
           yes | sdkmanager --sdk_root="$SDK" --licenses || true
 
-          # Install all required SDK and NDK components upfront
           yes | sdkmanager --sdk_root="$SDK" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
@@ -111,7 +108,7 @@ jobs:
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
 
-          # Point buildozer and p4a to the correct NDK — unset runner's pre-installed NDK vars
+          # Unset runner's pre-installed NDK vars so they don't override ours
           unset ANDROID_NDK_LATEST_HOME ANDROID_NDK_HOME ANDROID_NDK ANDROID_NDK_ROOT
           export ANDROID_NDK_HOME="$NDK"
           export ANDROIDNDK="$NDK"
@@ -120,9 +117,16 @@ jobs:
 
           buildozer -v android debug 2>&1 | tee build.log
 
-          # Show where the APK landed (helps debug path issues)
-          echo "=== APK search ==="
-          find . -name "*.apk" 2>/dev/null || echo "No APK found"
+      # ── Locate APK ────────────────────────────────────────────────────────
+      # Copy APK to a fixed path so upload-artifact doesn't need a glob
+      - name: Locate and copy APK
+        if: success()
+        run: |
+          echo "=== Searching for APK ==="
+          find /home/runner/work -name "*.apk" 2>/dev/null
+          mkdir -p output_apk
+          find /home/runner/work -name "*.apk" -exec cp {} output_apk/ \; 2>/dev/null
+          ls -lh output_apk/ || echo "No APK copied"
 
       # ── Upload APK ────────────────────────────────────────────────────────
       - name: Upload APK
@@ -130,9 +134,7 @@ jobs:
         if: success()
         with:
           name: moviesda-debug-apk
-          path: |
-            bin/*.apk
-            .buildozer/android/platform/build-*/dists/*/bin/*.apk
+          path: output_apk/
 
       # ── Upload logs on failure ────────────────────────────────────────────
       - name: Upload build log on failure
