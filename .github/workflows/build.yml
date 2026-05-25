@@ -33,8 +33,7 @@ jobs:
             pkg-config cmake ninja-build \
             libffi-dev libssl-dev \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libltdl-dev libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
+            libltdl-dev \
             build-essential ccache
 
       - name: Install buildozer and cython
