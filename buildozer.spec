@@ -22,6 +22,9 @@ android.archs = arm64-v8a, armeabi-v7a
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,FOREGROUND_SERVICE,POST_NOTIFICATIONS
 android.allow_backup = False
 
+# Use patched local recipe to fix libthorvg IndexError
+p4a.local_recipes = ./p4a_recipes
+
 p4a.branch = develop
 
 [buildozer]
