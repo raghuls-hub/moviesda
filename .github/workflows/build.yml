@@ -13,17 +13,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
       - uses: actions/checkout@v5
 
-      # ── Python ────────────────────────────────────────────────────────────
+      # ── Python 3.11 ───────────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      # ── Java ──────────────────────────────────────────────────────────────
+      # ── Java 17 ───────────────────────────────────────────────────────────
       - name: Set up Java 17
-        uses: actions/setup-java@v5 # v5 = Node.js 24
+        uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: "temurin"
@@ -42,50 +43,72 @@ jobs:
             libltdl-dev libpython3-dev patchelf \
             build-essential ccache lld
 
-      # ── Python packages ───────────────────────────────────────────────────
-      # cython 0.29.x required — Kivy 2.x recipes break on cython 3.x
+      # ── buildozer + cython ────────────────────────────────────────────────
+      # cython 0.29.x is required — Kivy 2.x recipes break on cython 3.x
       - name: Install buildozer and cython
         run: |
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==0.29.37
 
-      # ── Buildozer cache ───────────────────────────────────────────────────
-      - name: Cache buildozer global directory
+      # ── Cache ~/.buildozer ────────────────────────────────────────────────
+      - name: Cache buildozer directory
         uses: actions/cache@v5
         with:
           path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-ndk21e-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            buildozer-${{ runner.os }}-
+            buildozer-${{ runner.os }}-ndk21e-
 
-      # ── Android SDK + NDK ─────────────────────────────────────────────────
-      # NDK r23b avoids the libthorvg IndexError bug present with NDK r25b
-      - name: Install Android SDK, licenses, and NDK r23b
+      # ── Android SDK ───────────────────────────────────────────────────────
+      - name: Install Android SDK cmdline-tools and components
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$SDK/cmdline-tools"
 
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+          wget -q \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
             -O /tmp/cmdline-tools.zip
           unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-extract
           mv /tmp/cmdline-tools-extract/cmdline-tools "$SDK/cmdline-tools/latest"
 
-          # Shim for buildozer's hardcoded tools/bin/sdkmanager path
+          # Shim required because buildozer hardcodes tools/bin/sdkmanager
           mkdir -p "$SDK/tools/bin"
           ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$PATH"
 
+          # Accept all licenses
           yes | sdkmanager --sdk_root="$SDK" --licenses || true
 
+          # Install required SDK components
           yes | sdkmanager --sdk_root="$SDK" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
-            "platform-tools" \
-            "ndk;23.2.8568313" || true
+            "platform-tools" || true
 
-      # ── License hash files fallback ───────────────────────────────────────
-      - name: Write Android SDK license hash files
+      # ── NDK r21e ──────────────────────────────────────────────────────────
+      # r21e is the stable NDK for buildozer 1.5.0 + p4a:
+      #   r23b → clang-14: unsupported option '-print-multi-os-directory'
+      #   r25b → libthorvg recipe IndexError: list index out of range
+      #   r21e → no known issues with any p4a recipe
+      # Downloaded manually because sdkmanager no longer lists r21e.
+      - name: Install NDK r21e
+        run: |
+          NDK_DIR="$HOME/.buildozer/android/platform/android-ndk-r21e"
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "Downloading NDK r21e..."
+            wget -q \
+              https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip \
+              -O /tmp/android-ndk-r21e.zip
+            unzip -q /tmp/android-ndk-r21e.zip \
+              -d "$HOME/.buildozer/android/platform/"
+            echo "NDK r21e installed at $NDK_DIR"
+          else
+            echo "NDK r21e already cached, skipping download"
+          fi
+
+      # ── SDK license hash files (fallback) ────────────────────────────────
+      - name: Write Android SDK license files
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$SDK/licenses"
@@ -100,16 +123,21 @@ jobs:
           printf "\ne9acab5b5fbb560a72cfaecce8946896ff6aab9d" \
             > "$SDK/licenses/mips-android-sysimage-license"
 
-      # ── Build ─────────────────────────────────────────────────────────────
+      # ── Build APK ─────────────────────────────────────────────────────────
       - name: Build APK
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$HOME/.buildozer/android/platform/android-ndk-r23b"
+          NDK="$HOME/.buildozer/android/platform/android-ndk-r21e"
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
 
-          # Unset runner's pre-installed NDK vars so they don't override ours
-          unset ANDROID_NDK_LATEST_HOME ANDROID_NDK_HOME ANDROID_NDK ANDROID_NDK_ROOT
+          # Clear ALL runner pre-installed NDK env vars to prevent interference
+          unset ANDROID_NDK_LATEST_HOME
+          unset ANDROID_NDK_HOME
+          unset ANDROID_NDK
+          unset ANDROID_NDK_ROOT
+
+          # Point buildozer and p4a to NDK r21e
           export ANDROID_NDK_HOME="$NDK"
           export ANDROIDNDK="$NDK"
           export ANDROID_NDK="$NDK"
@@ -117,16 +145,21 @@ jobs:
 
           buildozer -v android debug 2>&1 | tee build.log
 
-      # ── Locate APK ────────────────────────────────────────────────────────
-      # Copy APK to a fixed path so upload-artifact doesn't need a glob
-      - name: Locate and copy APK
+      # ── Collect APK ───────────────────────────────────────────────────────
+      # Copy APK to a fixed folder — avoids glob failures from
+      # buildozer placing the APK in unpredictable subdirectories
+      - name: Collect APK
         if: success()
         run: |
-          echo "=== Searching for APK ==="
-          find /home/runner/work -name "*.apk" 2>/dev/null
           mkdir -p output_apk
-          find /home/runner/work -name "*.apk" -exec cp {} output_apk/ \; 2>/dev/null
-          ls -lh output_apk/ || echo "No APK copied"
+          echo "=== APK search ==="
+          find /home/runner/work -name "*.apk" 2>/dev/null | tee /tmp/apk_paths.txt
+          while IFS= read -r apk; do
+            cp "$apk" output_apk/
+            echo "Copied: $apk"
+          done < /tmp/apk_paths.txt
+          echo "=== output_apk contents ==="
+          ls -lh output_apk/
 
       # ── Upload APK ────────────────────────────────────────────────────────
       - name: Upload APK
