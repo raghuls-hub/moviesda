@@ -1,5 +1,5 @@
 kivy==2.3.1
-kivymd @ https://github.com/kivymd/KivyMD/archive/master.zip
+https://github.com/kivymd/KivyMD/archive/master.zip
 plyer==2.1.0
 requests==2.34.2
 beautifulsoup4==4.14.3
