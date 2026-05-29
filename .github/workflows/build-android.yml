@@ -19,15 +19,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build with official Buildozer image
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
         run: |
-          docker pull ghcr.io/kivy/buildozer:latest
-          docker run --rm \
-            --volume "${{ github.workspace }}:/home/user/hostcwd" \
-            --volume "${{ github.workspace }}/.buildozer:/home/user/.buildozer" \
-            --workdir /home/user/hostcwd \
-            ghcr.io/kivy/buildozer:latest \
-            android debug
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            ccache \
+            cmake \
+            git \
+            libffi-dev \
+            libltdl-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libssl-dev \
+            libtool \
+            libtinfo5 \
+            openjdk-17-jdk \
+            patch \
+            pkg-config \
+            python3-venv \
+            unzip \
+            zip \
+            zlib1g-dev
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip wheel "Cython<3.0" buildozer
+
+      - name: Build Android APK
+        run: |
+          buildozer android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
