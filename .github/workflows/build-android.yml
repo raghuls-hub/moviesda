@@ -19,16 +19,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
-        with:
-          workdir: .
-          command: buildozer android debug
-          buildozer_version: stable
+      - name: Build with official Buildozer image
+        run: |
+          docker pull ghcr.io/kivy/buildozer:latest
+          docker run --rm \
+            --volume "${{ github.workspace }}:/home/user/hostcwd" \
+            --volume "${{ github.workspace }}/.buildozer:/home/user/.buildozer" \
+            --workdir /home/user/hostcwd \
+            ghcr.io/kivy/buildozer:latest \
+            buildozer android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: moviesda-android-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
