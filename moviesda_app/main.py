@@ -58,6 +58,7 @@ class MovieBrowserApp(MDApp):
     def on_stop(self):
         # Signal the worker to stop after finishing the current job
         self.queue_manager.shutdown()
+        self.executor.shutdown(wait=False, cancel_futures=True)
 
     # ---------------------------------------------------------------- queue
 

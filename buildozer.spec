@@ -25,7 +25,7 @@ entrypoint = main.py
 
 # (list) Application requirements
 # KivyMD 2.x is required because the app uses MDButton and MDButtonText.
-requirements = python3,kivy,requests,beautifulsoup4,plyer,kivymd==1.0.2
+requirements = python3,kivy,requests,beautifulsoup4,plyer,kivymd @ https://github.com/kivymd/KivyMD/archive/master.zip
 
 # (list) Permissions
 android.permissions = INTERNET,POST_NOTIFICATIONS,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE

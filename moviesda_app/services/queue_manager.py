@@ -19,8 +19,7 @@ class DownloadQueueManager:
         self._lock = threading.Lock()
         self._cancel_active = threading.Event()
         self._active_id: str | None = None
-        # non-daemon so downloads survive app backgrounding
-        self._worker = threading.Thread(target=self._run, daemon=False, name="download-worker")
+        self._worker = threading.Thread(target=self._run, daemon=True, name="download-worker")
         self._worker.start()
 
     # ------------------------------------------------------------------ public
