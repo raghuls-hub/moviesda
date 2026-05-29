@@ -45,16 +45,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python - <<'PY'
-          import sys
-          sys.path.insert(0, 'src')
-          try:
-              import moviesda_app.main as app
-              print('import moviesda_app.main ok')
-          except Exception as e:
-              print('import failed:', e)
-              raise
-          PY
+          python .github/ci/import_smoke_test.py
 
   android-build:
     name: Android build (manual)
@@ -73,7 +64,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y git zip unzip wget curl python3-venv python3-pip build-essential ccache lld
+          sudo apt-get install -y git zip unzip wget curl python3-venv python3-pip build-essential ccache lld openjdk-17-jdk-headless
 
       - name: Install buildozer and pinned Cython
         run: |
