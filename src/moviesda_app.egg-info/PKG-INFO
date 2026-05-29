@@ -8,8 +8,9 @@ Requires-Dist: beautifulsoup4>=4.12.3
 Requires-Dist: kivy>=2.3.0
 Requires-Dist: kivymd @ git+https://github.com/kivymd/KivyMD.git
 Requires-Dist: requests>=2.32.3
-Requires-Dist: watchdog>=6.0.0
 Requires-Dist: plyer>=2.1.0
+Provides-Extra: dev
+Requires-Dist: watchdog>=6.0.0; extra == "dev"
 
 # MoviesDA KivyMD App
 

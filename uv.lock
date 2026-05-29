@@ -315,6 +315,10 @@ dependencies = [
     { name = "kivymd" },
     { name = "plyer" },
     { name = "requests" },
+]
+
+[package.optional-dependencies]
+dev = [
     { name = "watchdog" },
 ]
 
@@ -325,8 +329,9 @@ requires-dist = [
     { name = "kivymd", git = "https://github.com/kivymd/KivyMD.git" },
     { name = "plyer", specifier = ">=2.1.0" },
     { name = "requests", specifier = ">=2.32.3" },
-    { name = "watchdog", specifier = ">=6.0.0" },
+    { name = "watchdog", marker = "extra == 'dev'", specifier = ">=6.0.0" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "pillow"
