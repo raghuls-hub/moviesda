@@ -1,69 +1,56 @@
 [app]
+# (str) Title of your application
 title = MoviesDA
+
+# (str) Package name
 package.name = moviesda
-package.domain = org.example
-source.dir = .
-source.include_exts = py,kv,png,jpg,atlas,ttf,otf,txt,json
-version = 0.1.0
-requirements = python3,kivy==2.3.1,requests,beautifulsoup4,plyer,kivymd @ git+https://github.com/kivymd/KivyMD.git@master
-orientation = portrait
-fullscreen = 0
 
-[buildozer]
-log_level = 2
-warn_on_root = 1
-
-[android]
-# Android API/NDK settings
-android.api = 33
-android.minapi = 21
-android.ndk = 25b
-android.archs = armeabi-v7a,arm64-v8a
-android.compile_sdk = 33
-
-# Permissions required by the app
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_NETWORK_STATE,WAKE_LOCK
-
-# If you need to sign the build, configure these, otherwise Buildozer will create a debug key
-# android.release_keyalias = mykey
-# android.release_keystore = /path/to/keystore
-# android.release_keystore_passwd = secret
-# android.release_keyalias_passwd = secret
-
-# Notes:
-# - KivyMD is pulled from the git URL above. If pip install of the git URL fails during p4a
-#   build, either vendor KivyMD into your project or create a p4a recipe for the required KivyMD commit.
-# - Building for Android is best performed on Linux/WSL2. Windows hosts are not officially supported
-#   for the full Android toolchain. See https://buildozer.readthedocs.io/ and https://python-for-android.readthedocs.io/
-[app]
-title = MoviesDA App
-package.name = moviesdaapp
+# (str) Package domain
 package.domain = org.moviesda
-source.dir = .
-source.include_exts = py,kv,json,md,png,jpg,jpeg,gif,webp
-version = 0.1
 
-requirements = python3,kivy,kivymd,requests,beautifulsoup4,plyer,certifi,charset-normalizer,idna,urllib3,soupsieve
+# (str) Source code where the main.py lives
+source.dir = moviesda_app
 
-# make src/ package importable on Android
-android.add_src = src
+# (list) Source files to include
+source.include_exts = py,kv,png,jpg,jpeg,webp,atlas,ttf,otf,mp3,wav,ogg
 
-orientation = portrait
-fullscreen = 0
+# (list) Source files to exclude
+source.exclude_dirs = .git,.venv,.vscode,__pycache__,build,dist,.pytest_cache
 
-android.api = 33
-android.minapi = 26
-android.ndk = 25b
-android.build_tools_version = 33.0.2
+# (str) Application version
+version = 0.1.0
+
+# (str) Application entry point
+entrypoint = main.py
+
+# (list) Application requirements
+# KivyMD 2.x is required because the app uses MDButton and MDButtonText.
+requirements = python3,kivy,requests,beautifulsoup4,plyer,kivymd @ https://github.com/kivymd/KivyMD/archive/master.zip
+
+# (list) Permissions
+android.permissions = INTERNET,POST_NOTIFICATIONS,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+
+# (int) Target Android API
+android.api = 34
+
+# (int) Minimum Android API
+android.minapi = 24
+
+# (int) Android NDK API
+android.ndk_api = 24
+
+# (list) Android architectures
 android.archs = arm64-v8a, armeabi-v7a
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,FOREGROUND_SERVICE,POST_NOTIFICATIONS
-android.allow_backup = False
 
-# Use patched local recipe to fix libthorvg IndexError
-p4a.local_recipes = ./p4a_recipes
+# (bool) Automatically accept Android SDK licenses in CI
+android.accept_sdk_license = True
 
-p4a.branch = develop
+# (str) App orientation
+orientation = portrait
 
 [buildozer]
+# (int) Log level
 log_level = 2
+
+# (int) Warn when running as root
 warn_on_root = 1

@@ -1,0 +1,5 @@
+{
+  "python.defaultInterpreterPath": "C:/Users/M RAGHUL/AppData/Local/Programs/Python/Python311/python.exe",
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.extraPaths": ["."]
+}
