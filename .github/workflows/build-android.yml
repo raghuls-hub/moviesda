@@ -38,7 +38,7 @@ jobs:
             libncursesw5-dev \
             libssl-dev \
             libtool \
-            libtinfo5 \
+            libtinfo6 \
             openjdk-17-jdk \
             patch \
             pkg-config \
